@@ -1,6 +1,6 @@
 Attribute VB_Name = "Trends"
 'Sub FormatTrendSheet()
-'With ActiveSheet
+'With Sheets("Trends")
 '    .Range("A:A").ColumnWidth = 3
 '    .Range("A:A").RowHeight = 15
 '    '.Range("B:B").ColumnWidth = 15
@@ -53,7 +53,7 @@ Attribute VB_Name = "Trends"
 
 Sub FormatChartBlock(chartheadrow, trendname, x)
 If x = 0 Then
-    With ActiveSheet.Range("A" & chartheadrow & ":J" & chartheadrow)
+    With Sheets("Trends").Range("A" & chartheadrow & ":J" & chartheadrow)
         .MergeCells = True
         .Interior.color = 8421504
         .HorizontalAlignment = xlLeft
@@ -63,13 +63,13 @@ If x = 0 Then
         .Font.Size = 12
         .Value = trendname
     End With
-    With ActiveSheet.Range("A" & chartheadrow + 1 & ":J" & chartheadrow + 12)
+    With Sheets("Trends").Range("A" & chartheadrow + 1 & ":J" & chartheadrow + 12)
         .MergeCells = True
         '.Border = True
     End With
 End If
 If x = 48 Then
-    With ActiveSheet.Range("B" & chartheadrow & ":K" & chartheadrow)
+    With Sheets("Trends").Range("B" & chartheadrow & ":K" & chartheadrow)
         .MergeCells = True
         .Interior.color = 10921638
         .HorizontalAlignment = xlLeft
@@ -79,13 +79,13 @@ If x = 48 Then
         .Font.Size = 12
         .Value = trendname
     End With
-    With ActiveSheet.Range("B" & chartheadrow + 1 & ":K" & chartheadrow + 12)
+    With Sheets("Trends").Range("B" & chartheadrow + 1 & ":K" & chartheadrow + 12)
         .MergeCells = True
         '.Border = True
     End With
 End If
 If x = 96 Then
-    With ActiveSheet.Range("C" & chartheadrow & ":L" & chartheadrow)
+    With Sheets("Trends").Range("C" & chartheadrow & ":L" & chartheadrow)
         .MergeCells = True
         .Interior.color = 14277081
         .HorizontalAlignment = xlLeft
@@ -95,7 +95,7 @@ If x = 96 Then
         .Font.Size = 12
         .Value = trendname
     End With
-    With ActiveSheet.Range("C" & chartheadrow + 1 & ":L" & chartheadrow + 12)
+    With Sheets("Trends").Range("C" & chartheadrow + 1 & ":L" & chartheadrow + 12)
         .MergeCells = True
         '.Border = True
     End With
@@ -175,3 +175,13 @@ For x = 4 To 141 'NEED TO CHANGE HARD-CODED VALUES TO LAST ROW
 Next
 End Sub
 
+'DROP THE VALUES IN THE TREND DATA SHEET
+'                                                                Sheets("TrendData").Cells(trenddatarow, 1).Value = "Area " & area & ", Facility " & facility & ", " & assemblycode
+'
+'                                                                Sheets("TrendData").Cells(trenddatarow, 1).ClearComments
+'                                                                Sheets("TrendData").Cells(trenddatarow, 1).AddComment
+'                                                                Sheets("TrendData").Cells(trenddatarow, 1).Comment.Text Text:=uom
+'
+'                                                                'Sheets("TrendData").Cells(trenddatarow, 2).Value = facility
+'                                                                'Sheets("TrendData").Cells(trenddatarow, 3).Value = assemblycode
+'                                                                trenddatarow = trenddatarow + 1

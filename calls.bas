@@ -11,7 +11,7 @@ End Sub
 
 'Callback for QTOConfig onAction
 Sub call_QTOConfig(control As IRibbonControl)
-Call STAGING.CONFIGsheet
+Call TESTING.CONFIGsheet
 End Sub
 
 Sub call_SummaryQTO(control As IRibbonControl)
@@ -30,7 +30,7 @@ End Sub
 
 'Callback for configrules onAction
 Sub call_configrules(control As IRibbonControl)
-Call STAGING.configrules
+Call TESTING.configrules
 End Sub
 
 'Callback for compare onAction
@@ -45,7 +45,12 @@ End Sub
 
 'Callback for tolconfig onAction
 Sub call_configTol(control As IRibbonControl)
-Call STAGING.CONFIGsheet
+Call TESTING.CONFIGsheet
+End Sub
+
+'Callback for tolconfig onAction
+Sub call_trendreport(control As IRibbonControl)
+Call STAGING.TrendGraphs
 End Sub
 
 'Callback for helpdoc onAction

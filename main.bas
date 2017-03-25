@@ -1,6 +1,5 @@
 Attribute VB_Name = "main"
 Option Explicit
-Public overwriteQTO As Boolean
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 'OPEN FILE DIALOG TO GET MULTIPLE QEX FILES LOADED INTO QTO REPORT
@@ -68,17 +67,6 @@ Next
             Application.ScreenUpdating = True
             Exit Sub
         End If
-        
-        'IF THE MASTERQTO_FLAT SHEET DOES EXIST, ASK USER IF THEY WANT TO OVERWRITE OR APPEND. IF OVERWRITE, DELETE SHEET AND UPDATE FLAT_EXISTS
-        If MasterQTO_flatExists = True Then QEXimport.Show
-        If overwriteQTO = True Then
-            Application.DisplayAlerts = False
-            Sheets("MasterQTO_flat").Delete
-            Application.DisplayAlerts = True
-            MasterQTO_flatExists = False
-        End If
-            
-        
          
         'IF THE MASTERQTO_FLAT SHEET DOES NOT EXIST, CREATE ONE
         If MasterQTO_flatExists <> True Then
@@ -382,9 +370,7 @@ Sub runrules()
 
 Application.ScreenUpdating = False
 
-
     Dim lastrule As Long
-    Dim rule As Variant
     Dim newitemrow As Long
     Dim rulerow As Long
     Dim newformulaname As String
@@ -411,15 +397,37 @@ Application.ScreenUpdating = False
     Dim lastareacol As Integer
     Dim lastfaccol As Integer
     Dim replaceQTY As Boolean
-    Dim starttime As Variant
-    Dim finishtime As Variant
-    
-    'starttime = Time
+    Dim start As Variant
+    Dim finish As Variant
+    Dim totaltime As Variant
+    Dim searchformula As String
+    Dim formulamid As String
+    Dim formulaclose As String
+    Dim rulescolumn As Long
+    Dim rulestring As Variant
+    Dim rule As MSXML2.DOMDocument
+    Dim strXML As String
+    Dim searchcriteria As Variant
+    Dim x As Integer
+    Dim y As Integer
+    Dim searchcolumnname As String
+    Dim searchcolumn As Integer
+    Dim firstsearch As String
+    Dim oldstatusbar As Variant
+
     
     Sheets("MasterQTO_flat").Activate
+    start = Timer
+    
+    'REMOVE CONDITIONAL FORMATTING TO GROUP COLUMNS
+    Sheets("MasterQTO_flat").Cells.FormatConditions.Delete
+    
+    'SET FORMULA CALCULATION TO MANUAL
+    Application.Calculation = xlManual
     
     lastrule = Worksheets("Rules").Cells(Rows.count, 1).End(xlUp).Row
     newitemrow = Worksheets("MasterQTO_flat").Cells(Rows.count, 7).End(xlUp).Row + 1
+    rulescolumn = Worksheets("MasterQTO_flat").Cells(3, Columns.count).End(xlToLeft).Column + 1
     foundnext = 0
     assemblycodecol = Application.Match("Assembly Code", Sheets("CONFIG").ListObjects("QTO_CONFIG").ListColumns("Column Name").DataBodyRange, False)
     milestonecol = Application.Match("TE_Milestone", Sheets("CONFIG").ListObjects("QTO_CONFIG").ListColumns("Column Name").DataBodyRange, False)
@@ -429,19 +437,71 @@ Application.ScreenUpdating = False
     lastfaccol = Application.Match("TE_Facility", Sheets("CONFIG").Range("B9:B50"), False) + 6
     
     
-    
     'STEP THROUGH EACH RULE AND COMPARE PROPERTY VALUES AGAINST MASTER QTO
-    For Each rule In Sheets("Rules").Range("A2:A" & lastrule)
-        With Sheets("Rules")
-            rulerow = rule.Row
-            newformulaname = .Cells(rulerow, 1).Value
-            newcostcode = .Cells(rulerow, 2).Value
-            newpropertyname = .Cells(rulerow, 3).Value
-            newpropertyvalue = .Cells(rulerow, 4).Value
-            newuom = .Cells(rulerow, 5).Value
-            newformula = .Cells(rulerow, 6).Value
-            replaceQTY = .Cells(rulerow, 7).Value
-            newformula = Replace(newformula, "*", "|")
+    For Each rulestring In Sheets("Rules").Range("A2:A" & lastrule)
+        Set rule = New MSXML2.DOMDocument
+        rulerow = rulestring.Row
+        If Not rule.LoadXML(rulestring) Then
+            Err.Raise rule.parseError.ErrorCode, , rule.parseError.reason
+        End If
+    
+    'Dim point As IXMLDOMNode
+    'Set point = rule.FirstChild
+    
+    'Debug.Print point.SelectSingleNode("X").Text
+    'Debug.Print point.SelectSingleNode("Y").Text
+    
+    'For Each Child In point.ChildNodes
+        'Debug.Print point.ChildNodes.Length
+        newformulaname = rule.FirstChild.ChildNodes(0).Text
+        newuom = rule.FirstChild.ChildNodes(2).Text
+        newcostcode = rule.FirstChild.ChildNodes(3).Text
+        newformula = rule.FirstChild.ChildNodes(4).Text
+        newformula = Replace(newformula, "*", "|")
+        replaceQTY = rule.FirstChild.ChildNodes(5).Text
+        
+        
+        
+        
+        
+        
+        'CREATE A FORMULA TO SEARCH ACROSS COLUMNS AND VALUES AS DEFINED IN THE RULE
+        With rule.FirstChild.ChildNodes(1) '<SearchCriteria>
+            searchformula = "=if("
+            formulaclose = ",True,False)"
+            If .ChildNodes.length > 1 Then 'IF COUNT OF FIELDS IS GREATER THAN ONE, ADD 'AND' TO FORMULA
+                searchformula = searchformula & "AND("
+                formulaclose = ")" & formulaclose
+            End If
+            For x = 1 To .ChildNodes.length 'STEP THROUGH EACH FIELD
+                searchcolumn = Application.Match(.ChildNodes(x - 1).ChildNodes(0).nodeTypedValue, Sheets("CONFIG").ListObjects("QTO_CONFIG").ListColumns("Column Name").DataBodyRange, False)
+                firstsearch = Cells(4, searchcolumn).Address(False, False)
+                If .ChildNodes(x - 1).ChildNodes(1).ChildNodes.length > 1 Then 'IF COUNT OF VALUES IN ANY FIELD IS GREATER THAN ONE, ADD 'OR'
+                    searchformula = searchformula & "OR("
+                End If
+                For y = 1 To .ChildNodes(x - 1).ChildNodes(1).ChildNodes.length 'STEP THROUGH EACH VALUE WITHIN THE FIELD
+                    If y = .ChildNodes(x - 1).ChildNodes(1).ChildNodes.length Then
+                            searchformula = searchformula & firstsearch & "=""" & .ChildNodes(x - 1).ChildNodes(1).ChildNodes(y - 1).nodeTypedValue & """"
+                        If .ChildNodes(x - 1).ChildNodes(1).ChildNodes.length > 1 Then
+                        searchformula = searchformula & ")"
+                        End If
+                    Else
+                        searchformula = searchformula & firstsearch & "=""" & .ChildNodes(x - 1).ChildNodes(1).ChildNodes(y - 1).nodeTypedValue & """" & ","
+                    End If
+                Next
+                If x < .ChildNodes.length Then
+                    searchformula = searchformula & ","
+                End If
+            Next
+            
+            searchformula = searchformula & formulaclose
+        End With
+        
+        'INSERT COLUMN FOR SEARCH CRITERIA
+        With Sheets("MasterQTO_flat")
+            .Cells(3, rulescolumn).Value = "SearchCriteria"
+            Debug.Print searchformula
+            .Range(.Cells(4, rulescolumn).Address & ":" & .Cells(newitemrow - 1, rulescolumn).Address).Value = searchformula
         End With
         
         'BREAK DOWN THE FORMULA AND COMPOSE A DRAFT TO POINT TO THE CORRECT CELLS AND VALUES
@@ -463,11 +523,11 @@ Application.ScreenUpdating = False
         
         'WITHIN MASTER QTO, FIND ANY MATCHES WITHIN THE PROPERTY COLUMN STEP TO THE NEXT
         With Sheets("MasterQTO_flat")
-            propertycolumn = Application.Match(newpropertyname, .Range("A3:CC3"), False)
-            firstvaladdr = .Cells(4, propertycolumn).Address
-            lastvaladdr = .Cells(newitemrow - 1, propertycolumn).Address
-            With Range(firstvaladdr & ":" & lastvaladdr)
-                Set loc = .Cells.Find(What:=newpropertyvalue)
+            'propertycolumn = Application.Match(newpropertyname, .Range("A3:CC3"), False) 'REMOVE WHEN CHANGED TO SEARCHFIELD
+            firstvaladdr = .Cells(4, rulescolumn).Address
+            lastvaladdr = .Cells(newitemrow - 1, rulescolumn).Address
+            With .Range(firstvaladdr & ":" & lastvaladdr)
+                Set loc = .Cells.Find(What:=True, LookIn:=xlValues)
                 If Not loc Is Nothing Then
                     firstfound = loc.Row
                     Do Until foundnext = firstfound
@@ -475,12 +535,12 @@ Application.ScreenUpdating = False
                             finalformula = Replace(draftformula, "[rowholder]", loc.Row)
                             'Range("B" & newitemrow).Value = Range("B" & loc.Row).Value
                             'Range("C" & newitemrow).Value = Range("C" & loc.Row).Value
-                            .Range("F" & loc.Row).Value = "=IFNA(VLOOKUP(""" & newcostcode & """, 'Cost Report'!G:I,3,FALSE),""NOT ASSIGNED"")"
+                            Range("F" & loc.Row).Value = "=IFNA(VLOOKUP(""" & newcostcode & """, 'Cost Report'!G:I,3,FALSE),""NOT ASSIGNED"")"
                             'Range("G" & newitemrow).Value = newformulaname
                             'Range("H" & newitemrow).Value = "Extrapolated from " & Range("H" & loc.Row).Value
                             'Range("I" & newitemrow).Value = Range("I" & loc.Row).Value & "-E"
-                            .Range("J" & loc.Row).Value = finalformula
-                            .Range("K" & loc.Row).Value = newuom
+                            Range("J" & loc.Row).Value = finalformula
+                            Range("K" & loc.Row).Value = newuom
                             With Cells(loc.Row, assemblycodecol)
                                 .NumberFormat = "@"
                                 .Value = newcostcode
@@ -494,42 +554,64 @@ Application.ScreenUpdating = False
                             'newitemrow = newitemrow + 1
                         Else
                             finalformula = Replace(draftformula, "[rowholder]", loc.Row)
-                            .Range("B" & newitemrow).Value = Range("B" & loc.Row).Value
-                            .Range("C" & newitemrow).Value = Range("C" & loc.Row).Value
-                            .Range("F" & newitemrow).Value = "=IFNA(VLOOKUP(""" & newcostcode & """, 'Cost Report'!G:I,3,FALSE),""NOT ASSIGNED"")"
-                            .Range("G" & newitemrow).Value = newformulaname
-                            .Range("H" & newitemrow).Value = "Extrapolated from " & Range("H" & loc.Row).Value
-                            .Range("I" & newitemrow).Value = Range("I" & loc.Row).Value & "-E"
-                            .Range("J" & newitemrow).Value = finalformula
-                            .Range("K" & newitemrow).Value = newuom
+                            Range("B" & newitemrow).Value = Range("B" & loc.Row).Value
+                            Range("C" & newitemrow).Value = Range("C" & loc.Row).Value
+                            Range("F" & newitemrow).Value = "=IFNA(VLOOKUP(""" & newcostcode & """, 'Cost Report'!G:I,3,FALSE),""NOT ASSIGNED"")"
+                            Range("G" & newitemrow).Value = newformulaname
+                            Range("H" & newitemrow).Value = "Extrapolated from " & Range("H" & loc.Row).Value
+                            Range("I" & newitemrow).Value = Range("I" & loc.Row).Value & "-E"
+                            Range("J" & newitemrow).Value = finalformula
+                            Range("K" & newitemrow).Value = newuom
                             With Cells(newitemrow, assemblycodecol)
                                 .NumberFormat = "@"
                                 .Value = newcostcode
                             End With
-                            .Cells(newitemrow, milestonecol).Value = Cells(loc.Row, milestonecol).Value
-                            .Cells(newitemrow, methodcol).Value = "Extrapolated"
-                            .Cells(newitemrow, lastareacol).Value = Cells(loc.Row, lastareacol).Value
-                            .Cells(newitemrow, lastfaccol).Value = Cells(loc.Row, lastfaccol).Value
+                            Cells(newitemrow, milestonecol).Value = Cells(loc.Row, milestonecol).Value
+                            Cells(newitemrow, methodcol).Value = "Extrapolated"
+                            Cells(newitemrow, lastareacol).Value = Cells(loc.Row, lastareacol).Value
+                            Cells(newitemrow, lastfaccol).Value = Cells(loc.Row, lastfaccol).Value
                             Set loc = .FindNext(loc)
                             foundnext = loc.Row
                             newitemrow = newitemrow + 1
                         End If
+                    Application.StatusBar = "Rule " & rulerow & " of " & lastrule & " - Row " & foundnext
                     Loop
                 End If
             End With
             Set loc = Nothing
-            With Range("A4:AO" & newitemrow - 1).Borders
-                .LineStyle = xlContinuous
-                .Weight = xlThin
-                .ColorIndex = xlAutomatic
-            End With
         End With
-        'Debug.Print "finished " & rule
+        Debug.Print rulestring.Row & " Complete"
     Next
-    'finishtime = Time
-    'Debug.Print finishtime - starttime
+    
+    'ADD CONDITIONAL FORMATTING TO GROUP COLUMNS
+    
+    Application.StatusBar = "Rules Complete. Wrapping up..."
+    
+    With Sheets("MasterQTO_flat")
+        .Cells(3, rulescolumn).EntireColumn.Delete
+        With .Range("A4:AO" & newitemrow - 1).Borders
+            .LineStyle = xlContinuous
+            .Weight = xlThin
+            .ColorIndex = xlAutomatic
+        End With
+        With .Range("B:F").FormatConditions _
+            .Add(xlCellValue, xlEqual, "Not Assigned")
+            .Interior.color = 192
+        End With
+    End With
+    
+    'SET CALCULATION STYLE TO AUTOMATIC
+    Application.Calculation = xlAutomatic
+    
+    finish = Timer
+    totaltime = finish - start
+    Debug.Print totaltime & " seconds"
+    Application.StatusBar = ""
     Application.ScreenUpdating = True
 End Sub
+
+
+
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 'REMOVE GROUPING ROWS FROM THE MASTER QTO REPORT
@@ -604,6 +686,8 @@ End Sub
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 Sub SummaryCOSTCODEComparison()
     Application.ScreenUpdating = False
+    Application.Calculation = xlManual
+    Application.StatusBar = "Building Comparison Report"
 
     'DECLARE AND SET WORKBOOKS AND WORKSHEETS
     Dim wb_master As Workbook
@@ -620,7 +704,8 @@ Sub SummaryCOSTCODEComparison()
     Set ws_creport = Worksheets("Cost Report")
     'Set ws_compare = Worksheets("Comparison")
     Set ws_QTOflat = Worksheets("MasterQTO_flat")
-    'Set ws_trends = Worksheets("Trends")
+    Set ws_trenddata = Worksheets("TrendData")
+'    Set ws_trends = Worksheets("Trends")
     Set ws_assembly = Worksheets("Assembly Codes & Unit Costs")
 
 'DECLARE AND SET TABLES
@@ -642,6 +727,9 @@ Sub SummaryCOSTCODEComparison()
 
 'DECLARE AND SET OTHERS'
 
+    Dim runstart As Variant
+    Dim runcomplete As Variant
+    Dim runtime As Variant
     Dim areacol As Integer
     Dim allareas As Integer
     Dim facilitycol As Integer
@@ -713,36 +801,19 @@ Sub SummaryCOSTCODEComparison()
     Dim codecol As Integer
     Dim lastcomparerow As Long
     Dim compareareacol As Integer
-    Dim trenddataExists As Boolean
-    Dim trendTable As ListObject
+    
+    runstart = Timer
     
     'VERIFY THAT THE MASTERQTO_FLAT SHEET EXISTS
     For Each sheet In wb_master.Sheets
         If sheet.Name = ws_QTOflat.Name Then
             QTO_flatExists = True
         End If
-        If sheet.Name = "TrendData" Then
-            trenddataExists = True
-        End If
     Next
     If QTO_flatExists = False Then
         MsgBox "It looks like you have not imported QEX or MTO files. Please import data by using the 'Combine QEX Files' command and selecting QEX or MTO files."
         Application.ScreenUpdating = True
         Exit Sub
-    End If
-    
-    'IF TRENDDATA DOES NOT EXIST, CREATE IT
-    If trenddataExists = False Then
-        Set ws_trenddata = Worksheets.Add(After:=Sheets(Sheets.count))
-        With ws_trenddata
-            .Name = "TrendData"
-            .Visible = False
-            Set trendTable = .ListObjects.Add(xlSrcRange)
-            .Range("A1").Value = "Item"
-            .Range("B1").Value = Date
-        End With
-    Else
-        Set ws_trenddata = Worksheets("TrendData")
     End If
     
 
@@ -930,19 +1001,6 @@ Sub SummaryCOSTCODEComparison()
     
     Sheets("MasterQTO_flat").Activate
     
-    
-    
-    
-    
-    'NEED TO COME BACK TO HERE: PROVIDE THE ABILITY TO SEARCH THE TRENDDATA SHEET FOR COSTCODE:AREA:FACILITY
-    'AND IF FOUND, PLACE THE NEW VALUES FOR MODEL AND ESTIMATE. IF NOT FOUND, ADD NEW LINE WITH ITEM NAME, MODEL AND ESTIMATE QANTITY
-    
-    
-    
-    
-    
-    
-    
     'SORT THE FLAT QTO BY AREA>FACILITY>ASSEMBLY CODE>ITEM
     With Sheets("MasterQTO_flat")
         .Sort.SortFields.Clear
@@ -961,6 +1019,7 @@ Sub SummaryCOSTCODEComparison()
         For Each item In Range(Cells(4, costcodecol), Cells(lastrow, costcodecol))
             If item <> pItem And item <> "" Then
                 With Sheets("Comparison")
+                    Application.StatusBar = "Building Comparison Report - Cost Code " & item
                     .Cells(itemrow, 1).Value = "Cost Code " & item
                     .Cells(itemrow, 2).Value = "=VLOOKUP(""" & item & """,'Assembly Codes & Unit Costs'!A:G,2,FALSE)"
                     
@@ -1001,7 +1060,6 @@ Sub SummaryCOSTCODEComparison()
 
                                     costcodecol = Application.Match("Assembly Code", Worksheets("CONFIG").ListObjects("QTO_CONFIG").DataBodyRange.Columns(2), False)
                                     costcode = Sheets("MasterQTO_flat").Cells(item.Row, costcodecol).Value
-                                    
                                     'TEMP TO ADD THE DATA TO TRENDS SHEET
                                     'Sheets("trends").Range("X" & itemrow).Value = area & "-" & facility & "-" & costcode
                                     For y = 2 To UBound(columnheaders)
@@ -1429,7 +1487,7 @@ Sub SummaryCOSTCODEComparison()
         Next
     End With
     
-
+    Application.StatusBar = "Wrapping up..."
     With Sheets("Comparison")
         .UsedRange.EntireColumn.AutoFit
         '.Outline.ShowLevels rowlevels:=3
@@ -1451,8 +1509,20 @@ Sub SummaryCOSTCODEComparison()
 
     Sheets("Comparison").Activate
     Sheets("Comparison").Range("A1").Select
+    
+    runcomplete = Timer
+    runtime = runcomplete - runstart
+    Debug.Print runtime
 
+Application.Calculation = xlAutomatic
 Application.ScreenUpdating = True
+Application.StatusBar = "Report Complete"
+Application.OnTime Now + TimeSerial(0, 0, 10), "ClearStatusBar"
+
+End Sub
+
+Sub ClearStatusBar()
+    Application.StatusBar = False
 
 End Sub
 
@@ -1529,6 +1599,7 @@ End Sub
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 Sub SummaryQTO()
     Application.ScreenUpdating = False
+    Application.Calculation = xlManual
 
     Dim areacol As Integer
     Dim facilitycol As Integer
@@ -1567,7 +1638,6 @@ Sub SummaryQTO()
     Dim itemformula As String
     Dim itemlong As String
     Dim pitemlong As String
-    'Dim trenddatarow As Long
     
   
     'VERIFY THAT THE MASTERQTO_FLAT SHEET EXISTS
@@ -1654,7 +1724,6 @@ Sub SummaryQTO()
     
     
     itemrow = 4
-    'trenddatarow = 2
     
     Sheets("MasterQTO_flat").Activate
     
@@ -1773,20 +1842,6 @@ Sub SummaryQTO()
                                                                 sumend = .Cells(itemrow - 1, quantitycol).Address
                                                                 .Cells(pAssemblyRow, quantitycol).Value = "=SUBTOTAL(9," & sumstart & ":" & sumend & ")"
                                                                 .Cells(pAssemblyRow, quantitycol).Font.Bold = True
-                                                                
-                                                                
-                                                                
-                                                                'DROP THE VALUES IN THE TREND DATA SHEET
-'                                                                Sheets("TrendData").Cells(trenddatarow, 1).Value = "Area " & area & ", Facility " & facility & ", " & assemblycode
-'
-'                                                                Sheets("TrendData").Cells(trenddatarow, 1).ClearComments
-'                                                                Sheets("TrendData").Cells(trenddatarow, 1).AddComment
-'                                                                Sheets("TrendData").Cells(trenddatarow, 1).Comment.Text Text:=uom
-'
-'                                                                'Sheets("TrendData").Cells(trenddatarow, 2).Value = facility
-'                                                                'Sheets("TrendData").Cells(trenddatarow, 3).Value = assemblycode
-'                                                                trenddatarow = trenddatarow + 1
-                                                                
                                                                 .Range("A" & pAssemblyRow + 1 & ":" & "A" & itemrow - 1).EntireRow.Group
                                                                 .Outline.SummaryRow = False
                                                             End With
@@ -1826,6 +1881,7 @@ Sub SummaryQTO()
     End With
     
 Sheets("MasterQTO").Activate
+Application.Calculation = xlAutomatic
 Application.ScreenUpdating = True
 
 End Sub
@@ -1858,7 +1914,7 @@ Application.ScreenUpdating = False
     
     tolcol = Application.Match("Within Tolerance", Sheets("CONFIG").ListObjects("COMPARE_CONFIG").ListColumns("Column Name").DataBodyRange, False)
     Sheets("Comparison").Copy
-    ActiveSheet.Name = "PM Summary"
+    Sheets("Trends").Name = "PM Summary"
     With Sheets("PM Summary")
         'NEED TO REMOVE STATIC COLUMN REFERENCE
         'RUN THROUGH THE LIST THREE TIMES TO MAKE SURE ALL GROUPS ARE REMOVED. NOT IDEAL AND SHOULD BE CHANGED BUT WORKS TO REMOVE AREA FACILITY AND CODES
