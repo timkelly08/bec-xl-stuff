@@ -3,7 +3,7 @@ Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} createformula
    Caption         =   "Create New Rule"
    ClientHeight    =   11070
    ClientLeft      =   30
-   ClientTop       =   375
+   ClientTop       =   380
    ClientWidth     =   9240.001
    OleObjectBlob   =   "createformula.frx":0000
    StartUpPosition =   1  'CenterOwner

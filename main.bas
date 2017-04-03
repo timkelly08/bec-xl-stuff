@@ -1652,6 +1652,14 @@ Sub SummaryQTO()
         Exit Sub
     End If
     
+    
+    'REMOVE CONDITIONAL FORMATTING TO GROUP COLUMNS
+    Sheets("MasterQTO_flat").Cells.FormatConditions.Delete
+    
+    'SET FORMULA CALCULATION TO MANUAL
+    Application.Calculation = xlManual
+    
+    
     'IDENTIFY WHICH COLUMNS TO USE FROM THE QTO_CONFIG TABLE
     areacol = Application.Match("TE_Area", Worksheets("CONFIG").ListObjects("QTO_CONFIG").DataBodyRange.Columns(2), False)
     facilitycol = Application.Match("TE_Facility", Worksheets("CONFIG").ListObjects("QTO_CONFIG").DataBodyRange.Columns(2), False)
@@ -1795,6 +1803,7 @@ Sub SummaryQTO()
                                                         
                                                         'RUN THROUGH EACH ITEM ROW
                                                         For Each item In Range(Cells(4, itemcol), Cells(lastrow, itemcol))
+                                                            Application.StatusBar = "Building Report - " & area & " - " & facility
                                                             itemlong = assemblycode & "-" & item
                                                             If itemlong <> pitemlong Then
                                                                 If Cells(item.Row, areacol).Value = area Then
@@ -1880,6 +1889,13 @@ Sub SummaryQTO()
         .Outline.ShowLevels rowlevels:=3
     End With
     
+    
+    Application.Calculation = xlAutomatic
+    Application.ScreenUpdating = True
+    Application.StatusBar = "Report Complete"
+    Application.OnTime Now + TimeSerial(0, 0, 10), "ClearStatusBar"
+
+
 Sheets("MasterQTO").Activate
 Application.Calculation = xlAutomatic
 Application.ScreenUpdating = True
